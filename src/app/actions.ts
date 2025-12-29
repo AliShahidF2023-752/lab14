@@ -20,7 +20,11 @@ export async function calculateTicketPrice(
     const result: PricingResult | ApiError = await response.json();
 
     if (result.statusCode !== 200) {
-      return { error: (result as ApiError).body.error || 'An unknown error occurred.' };
+      const apiError = result as ApiError;
+      if (apiError.body && apiError.body.error) {
+        return { error: apiError.body.error };
+      }
+      return { error: 'An unknown error occurred.' };
     }
 
     return { data: (result as PricingResult).body };
