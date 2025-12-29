@@ -2,7 +2,7 @@
 
 import type { z } from 'zod';
 import type { ApiError, PricingResult, SumResult } from '@/lib/types';
-import type { pricingSchema, sumSchema } from '@/lib/schemas';
+import { pricingSchema, sumSchema } from '@/lib/schemas';
 
 const PRICING_URL = 'https://faas-blr1-8177d592.doserverless.co/api/v1/web/fn-efde7da4-9cf7-4aad-9f2f-8d5afd503964/default/dynamic-ticket-pricing';
 const SUM_URL = 'https://faas-blr1-8177d592.doserverless.co/api/v1/web/fn-efde7da4-9cf7-4aad-9f2f-8d5afd503964/default/sum-function';
@@ -42,7 +42,11 @@ export async function calculateSum(
     const result: SumResult | ApiError = await response.json();
     
     if (result.statusCode !== 200) {
-      return { error: (result as ApiError).body.error || 'An unknown error occurred.' };
+      const apiError = result as ApiError;
+      if (apiError.body && apiError.body.error) {
+        return { error: apiError.body.error };
+      }
+      return { error: 'An unknown error occurred.' };
     }
 
     return { data: (result as SumResult).body };
