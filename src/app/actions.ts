@@ -1,60 +1,52 @@
 'use server';
 
+import { pricingSchema } from '@/lib/schemas';
 import type { z } from 'zod';
-import type { ApiError, PricingResult, SumResult } from '@/lib/types';
-import { pricingSchema, sumSchema } from '@/lib/schemas';
-
-const PRICING_URL = 'https://faas-blr1-8177d592.doserverless.co/api/v1/web/fn-efde7da4-9cf7-4aad-9f2f-8d5afd503964/default/dynamic-ticket-pricing';
-const SUM_URL = 'https://faas-blr1-8177d592.doserverless.co/api/v1/web/fn-efde7da4-9cf7-4aad-9f2f-8d5afd503964/default/sum-function';
+import type { PricingResult, ApiError } from '@/lib/types';
 
 export async function calculateTicketPrice(
   values: z.infer<typeof pricingSchema>
 ): Promise<{ data?: PricingResult['body']; error?: string }> {
   try {
-    const response = await fetch(PRICING_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(values),
-    });
+    // Validate input
+    const validated = pricingSchema.parse(values);
 
-    const result: PricingResult | ApiError = await response.json();
-
-    if (result.statusCode !== 200) {
-      const apiError = result as ApiError;
-      if (apiError.body && apiError.body.error) {
-        return { error: apiError.body.error };
+    // Call your DigitalOcean function
+    const response = await fetch(
+      'https://faas-blr1-8177d592.doserverless.co/api/v1/web/fn-efde7da4-9cf7-4aad-9f2f-8d5afd503964/default/dynamic-ticket-pricing',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          basePrice: validated.basePrice,
+          demand: validated.demand,
+          daysUntilEvent: validated.daysUntilEvent,
+        }),
+        cache: 'no-store',
       }
-      return { error: 'An unknown error occurred.' };
+    );
+
+    const data: PricingResult | ApiError = await response.json();
+
+    // Check if it's an error response
+    if (data.statusCode !== 200) {
+      const errorData = data as ApiError;
+      return {
+        error: errorData.body.error || 'Calculation failed',
+      };
     }
 
-    return { data: (result as PricingResult).body };
-  } catch (err) {
-    return { error: 'Failed to connect to the pricing service. Please try again later.' };
-  }
-}
-
-export async function calculateSum(
-  values: z.infer<typeof sumSchema>
-): Promise<{ data?: SumResult['body']; error?: string }> {
-  try {
-    const response = await fetch(SUM_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(values),
-    });
-
-    const result: SumResult | ApiError = await response.json();
-    
-    if (result.statusCode !== 200) {
-      const apiError = result as ApiError;
-      if (apiError.body && apiError.body.error) {
-        return { error: apiError.body.error };
-      }
-      return { error: 'An unknown error occurred.' };
-    }
-
-    return { data: (result as SumResult).body };
-  } catch (err) {
-    return { error: 'Failed to connect to the sum service. Please try again later.' };
+    // Return successful data
+    const successData = data as PricingResult;
+    return {
+      data: successData.body,
+    };
+  } catch (error) {
+    console.error('Calculation error:', error);
+    return {
+      error: error instanceof Error ? error.message : 'An unexpected error occurred',
+    };
   }
 }
